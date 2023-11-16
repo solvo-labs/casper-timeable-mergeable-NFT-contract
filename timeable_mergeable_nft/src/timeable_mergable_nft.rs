@@ -102,8 +102,8 @@ pub extern "C" fn call() {
     runtime::put_key(&contract_hash_text.to_string(), contract_hash.into());
 }
 
-pub fn burn_nft(contract_hash: ContractHash, token_id: u64) -> (String, Key, String) {
-    runtime::call_contract(
+pub fn burn_nft(contract_hash: ContractHash, token_id: u64) -> () {
+    runtime::call_contract::<()>(
         contract_hash,
         "burn",
         runtime_args! {
