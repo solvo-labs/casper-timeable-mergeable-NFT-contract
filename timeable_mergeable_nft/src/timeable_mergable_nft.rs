@@ -45,7 +45,7 @@ struct Metadata {
 impl ToString for Metadata {
     fn to_string(&self) -> String {
         format!(
-            "Metadata {{ name: {}, description: {}, asset: {} }}",
+            r#"{{"name":"{}","description":"{}","asset":"{}"}}"#,
             self.name,
             self.description,
             self.asset
