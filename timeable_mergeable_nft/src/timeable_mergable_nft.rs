@@ -29,6 +29,7 @@ const OWNER: &str = "owner";
 const COLLECTION: &str = "collection";
 const METADATA: &str = "metadata";
 const TOKEN_ID: &str = "token_id";
+const NAME: &str = "name";
 
 //entry points
 const ENTRY_POINT_MINT: &str = "mint";
@@ -55,7 +56,11 @@ pub extern "C" fn mint() {
 
 #[no_mangle]
 pub extern "C" fn call() {
-    let named_keys = NamedKeys::new();
+    let name = "Dappend CEP-78 Custom NFT Contract";
+
+    let mut named_keys = NamedKeys::new();
+
+    named_keys.insert(NAME.to_string(), storage::new_uref(name.clone()).into());
 
     let mut entry_points = EntryPoints::new();
 
@@ -82,15 +87,9 @@ pub extern "C" fn call() {
     entry_points.add_entry_point(mint_entry_point);
     entry_points.add_entry_point(burn_entry_point);
 
-    let name = "dummy";
-    let str1 = &name.to_string();
-
-    let str2 = String::from("dappend_nft_package_hash_");
-    let str3 = String::from("dappend_nft_access_uref_");
-    let str4 = String::from("dappend_nft_contract_hash_");
-    let hash_name = str2 + &str1;
-    let uref_name = str3 + &str1;
-    let contract_hash_text = str4 + &str1;
+    let hash_name = String::from("dappend_nft_package_hash");
+    let uref_name = String::from("dappend_nft_access_uref");
+    let contract_hash_text = String::from("dappend_nft_contract_hash");
 
     let (contract_hash, _contract_version) = storage::new_contract(
         entry_points,
