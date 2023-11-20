@@ -7,6 +7,8 @@ edition = "2018"
 casper-contract = {version = "1.4.4", features = ["test-support"]}
 casper-types = "1.5.0"
 casper_types_derive = "0.1.0"
+serde = { version = "1.0.80", default-features = false }
+serde-json-wasm = { version = "1.0.0", default-features = false }
 
 [[bin]]
 name = "timeable_mergeable_nft"
@@ -14,3 +16,4 @@ path = "src/lib.rs"
 bench = false
 doctest = false
 test = false
+

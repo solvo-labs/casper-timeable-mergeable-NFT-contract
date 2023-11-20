@@ -509,6 +509,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-json-wasm"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83c37d03f3b0f6b5f77c11af1e7c772de1c9af83e50bef7bb6069601900ba67b"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde_bytes"
 version = "0.11.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -603,6 +612,8 @@ dependencies = [
  "casper-contract",
  "casper-types",
  "casper_types_derive",
+ "serde",
+ "serde-json-wasm",
 ]
 
 [[package]]
