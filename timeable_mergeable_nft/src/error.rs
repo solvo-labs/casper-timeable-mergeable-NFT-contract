@@ -5,6 +5,7 @@ use casper_types::ApiError;
 pub enum Error {
     FatalError = 0,
     AdminError = 1,
+    NotMergableNft = 2,
 }
 
 impl From<Error> for ApiError {

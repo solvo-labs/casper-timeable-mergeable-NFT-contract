@@ -1,8 +1,6 @@
-use core::ops::Add;
-
 use alloc::{ string::{ String, ToString }, vec::Vec, vec, boxed::Box, format };
 
-use crate::{ error::Error, utils::{ get_current_address, get_key, self }, enums::Address };
+use crate::error::Error;
 
 use casper_types::{
     account::AccountHash,
@@ -14,15 +12,14 @@ use casper_types::{
     EntryPointType,
     EntryPoints,
     contracts::NamedKeys,
-    U512,
     RuntimeArgs,
     runtime_args,
-    URef,
-    CLValue,
     Parameter,
 };
 
-use casper_contract::contract_api::{ runtime, storage, system };
+use casper_contract::contract_api::{ runtime, storage };
+
+use serde::{ Deserialize, Serialize };
 
 // variables
 const COLLECTION: &str = "collection";
@@ -30,19 +27,29 @@ const METADATA: &str = "metadata";
 const TOKEN_ID: &str = "token_id";
 const TOKEN_IDS: &str = "token_ids";
 const NAME: &str = "name";
+const OWNER: &str = "owner";
 
 //entry points
 const ENTRY_POINT_MINT: &str = "mint";
 const ENTRY_POINT_BURN: &str = "burn";
 const ENTRY_POINT_MERGE: &str = "merge";
 
-struct Metadata {
+struct MetadataBase {
     name: String,
     description: String,
     asset: String,
 }
 
-impl ToString for Metadata {
+#[derive(Debug, Serialize, Deserialize)]
+struct MetadataExtended {
+    name: String,
+    description: String,
+    asset: String,
+    timeable: bool,
+    mergable: bool,
+}
+
+impl ToString for MetadataBase {
     fn to_string(&self) -> String {
         format!(
             r#"{{"name":"{}","description":"{}","asset":"{}"}}"#,
@@ -61,6 +68,16 @@ pub extern "C" fn merge() {
     let caller: AccountHash = runtime::get_caller();
 
     for &token_id in &token_ids {
+        let metadata = get_nft_metadata(collection_hash, token_id);
+
+        let deserialised: MetadataExtended = serde_json_wasm
+            ::from_str::<MetadataExtended>(&metadata)
+            .unwrap();
+
+        if deserialised.mergable == false {
+            runtime::revert(Error::NotMergableNft);
+        }
+
         burn_nft(collection_hash, token_id);
     }
 
@@ -72,7 +89,7 @@ pub extern "C" fn merge() {
 
     let message = format!("We merged {} token ids", merged_token_ids);
 
-    let merged_nft = Metadata {
+    let merged_nft = MetadataBase {
         name: String::from("Dappend Merged Nft"),
         description: message,
         asset: String::from(
@@ -105,10 +122,12 @@ pub extern "C" fn mint() {
 #[no_mangle]
 pub extern "C" fn call() {
     let name = "Dappend CEP-78 Custom NFT Contract";
+    let owner: AccountHash = runtime::get_caller();
 
     let mut named_keys = NamedKeys::new();
 
     named_keys.insert(NAME.to_string(), storage::new_uref(name.clone()).into());
+    named_keys.insert(OWNER.to_string(), storage::new_uref(owner.clone()).into());
 
     let mut entry_points = EntryPoints::new();
 
@@ -174,6 +193,16 @@ pub fn mint_nft(contract_hash: ContractHash, owner: Key, metadata: String) -> ()
         runtime_args! {
           "token_owner" => owner,
           "token_meta_data" => metadata,
+      }
+    )
+}
+
+pub fn get_nft_metadata(contract_hash: ContractHash, token_id: u64) -> String {
+    runtime::call_contract::<String>(
+        contract_hash,
+        "metadata",
+        runtime_args! {
+          "token_id" => token_id,
       }
     )
 }
