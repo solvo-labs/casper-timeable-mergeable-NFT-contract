@@ -284,13 +284,20 @@ pub fn mint_nft_extend(
     owner: Key,
     metadata: String
 ) -> (String, Key, String) {
+    runtime::call_contract::<(String, URef)>(
+        contract_hash,
+        "register_owner",
+        runtime_args! {
+            "token_owner" => owner,
+        }
+    );
+
     runtime::call_contract::<(String, Key, String)>(
         contract_hash,
         "mint",
         runtime_args! {
           "token_owner" => owner,
-          "token_meta_data" => metadata,
-          "reverse_lookup" => true
+          "token_meta_data" => metadata
       }
     )
 }
