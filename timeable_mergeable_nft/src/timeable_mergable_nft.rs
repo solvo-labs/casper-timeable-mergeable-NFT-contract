@@ -1,6 +1,8 @@
+use core::ops::Add;
+
 use alloc::{ string::{ String, ToString }, vec::Vec, vec, boxed::Box, format };
 
-use crate::error::Error;
+use crate::{ error::Error, utils };
 
 use casper_types::{
     account::AccountHash,
@@ -15,7 +17,11 @@ use casper_types::{
     RuntimeArgs,
     runtime_args,
     Parameter,
+    U256,
+    URef,
 };
+
+use casper_types_derive::{ CLTyped, FromBytes, ToBytes };
 
 use casper_contract::contract_api::{ runtime, storage };
 
@@ -28,11 +34,18 @@ const TOKEN_ID: &str = "token_id";
 const TOKEN_IDS: &str = "token_ids";
 const NAME: &str = "name";
 const OWNER: &str = "owner";
+const NFT_INDEX: &str = "nft_index";
 
 //entry points
 const ENTRY_POINT_MINT: &str = "mint";
+const ENTRY_POINT_MINT_TIMEABLE_NFT: &str = "mint_timeable_nft";
 const ENTRY_POINT_BURN: &str = "burn";
 const ENTRY_POINT_MERGE: &str = "merge";
+const ENTRY_POINT_INIT: &str = "init";
+const ENTRY_POINT_BURN_TIMEABLE_NFT: &str = "burn_timeable_nft";
+
+//dicts
+const TIMEABLE_NFTS: &str = "timeable_nfts";
 
 struct MetadataBase {
     name: String,
@@ -47,6 +60,7 @@ struct MetadataExtended {
     asset: String,
     timeable: bool,
     mergable: bool,
+    timestamp: u64,
 }
 
 impl ToString for MetadataBase {
@@ -58,6 +72,14 @@ impl ToString for MetadataBase {
             self.asset
         )
     }
+}
+
+#[derive(Clone, Debug, CLTyped, ToBytes, FromBytes)]
+struct TimeableNft {
+    nft_index: u64,
+    timestamp: u64,
+    contract_hash: ContractHash,
+    burned: bool,
 }
 
 #[no_mangle]
@@ -76,6 +98,12 @@ pub extern "C" fn merge() {
 
         if deserialised.mergable == false {
             runtime::revert(Error::NotMergableNft);
+        }
+
+        let owner = owner_of(collection_hash, token_id);
+
+        if owner != Key::Account(caller) {
+            runtime::revert(Error::InvalidOwner);
         }
 
         burn_nft(collection_hash, token_id);
@@ -104,8 +132,16 @@ pub extern "C" fn merge() {
 pub extern "C" fn burn() {
     let collection: Key = runtime::get_named_arg(COLLECTION);
     let token_id: u64 = runtime::get_named_arg(TOKEN_ID);
+    let caller: AccountHash = runtime::get_caller();
 
     let collection_hash: ContractHash = collection.into_hash().map(ContractHash::new).unwrap();
+
+    let owner = owner_of(collection_hash, token_id);
+
+    if owner != Key::Account(caller) {
+        runtime::revert(Error::InvalidOwner);
+    }
+
     burn_nft(collection_hash, token_id);
 }
 
@@ -117,6 +153,74 @@ pub extern "C" fn mint() {
 
     let collection_hash: ContractHash = collection.into_hash().map(ContractHash::new).unwrap();
     mint_nft(collection_hash, Key::Account(caller), metadata);
+}
+
+#[no_mangle]
+pub extern "C" fn mint_timeable_nft() {
+    let metadata: String = runtime::get_named_arg(METADATA);
+    let collection: Key = runtime::get_named_arg(COLLECTION);
+    let caller: AccountHash = runtime::get_caller();
+
+    let metadata_extended: MetadataExtended = serde_json_wasm
+        ::from_str::<MetadataExtended>(&metadata)
+        .unwrap();
+
+    if metadata_extended.timeable == false {
+        runtime::revert(Error::NotTimeableNft);
+    }
+
+    let collection_hash: ContractHash = collection.into_hash().map(ContractHash::new).unwrap();
+    let contract_address = utils::get_current_address();
+
+    let (_, _, new_nft_index): (String, Key, String) = mint_nft_extend(
+        collection_hash,
+        Key::Account(caller),
+        contract_address.into(),
+        metadata
+    );
+
+    let nfts: URef = *runtime::get_key(TIMEABLE_NFTS).unwrap().as_uref().unwrap();
+
+    let nft_index: U256 = utils::read_from(NFT_INDEX);
+
+    storage::dictionary_put(nfts, &nft_index.to_string(), TimeableNft {
+        nft_index: new_nft_index.parse::<u64>().unwrap(),
+        timestamp: metadata_extended.timestamp,
+        contract_hash: collection_hash,
+        burned: false,
+    });
+
+    runtime::put_key(NFT_INDEX, storage::new_uref(nft_index.add(1)).into());
+}
+
+#[no_mangle]
+pub extern "C" fn burn_timeable_nft() {
+    let nfts = *runtime::get_key(TIMEABLE_NFTS).unwrap().as_uref().unwrap();
+    let nft_index: u64 = utils::read_from(NFT_INDEX);
+    let now: u64 = runtime::get_blocktime().into();
+
+    for i in 0..=nft_index {
+        let nft = storage::dictionary_get::<TimeableNft>(nfts, &i.to_string()).unwrap().unwrap();
+
+        // if nft.burned == false && now > nft.timestamp {
+        burn_nft(nft.contract_hash, nft.nft_index);
+
+        storage::dictionary_put(nfts, &i.to_string(), TimeableNft {
+            nft_index: nft.nft_index,
+            timestamp: nft.timestamp,
+            contract_hash: nft.contract_hash,
+            burned: true,
+        });
+        // }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn init() {
+    storage::new_dictionary(TIMEABLE_NFTS).unwrap_or_default();
+
+    let nft_count = U256::zero();
+    runtime::put_key(NFT_INDEX, storage::new_uref(nft_count).into());
 }
 
 #[no_mangle]
@@ -158,9 +262,36 @@ pub extern "C" fn call() {
         EntryPointType::Contract
     );
 
+    let init_entry_point = EntryPoint::new(
+        ENTRY_POINT_INIT,
+        vec![],
+        CLType::URef,
+        EntryPointAccess::Public,
+        EntryPointType::Contract
+    );
+
+    let mint_timeable_nft_entry_point = EntryPoint::new(
+        ENTRY_POINT_MINT_TIMEABLE_NFT,
+        vec![Parameter::new(COLLECTION, CLType::Key), Parameter::new(METADATA, CLType::String)],
+        CLType::URef,
+        EntryPointAccess::Public,
+        EntryPointType::Contract
+    );
+
+    let burn_timeable_nft_entry_point = EntryPoint::new(
+        ENTRY_POINT_BURN_TIMEABLE_NFT,
+        vec![],
+        CLType::URef,
+        EntryPointAccess::Public,
+        EntryPointType::Contract
+    );
+
     entry_points.add_entry_point(mint_entry_point);
     entry_points.add_entry_point(burn_entry_point);
     entry_points.add_entry_point(merge_entry_point);
+    entry_points.add_entry_point(init_entry_point);
+    entry_points.add_entry_point(mint_timeable_nft_entry_point);
+    entry_points.add_entry_point(burn_timeable_nft_entry_point);
 
     let hash_name = String::from("dappend_nft_package_hash");
     let uref_name = String::from("dappend_nft_access_uref");
@@ -174,6 +305,8 @@ pub extern "C" fn call() {
     );
 
     runtime::put_key(&contract_hash_text.to_string(), contract_hash.into());
+
+    runtime::call_contract::<()>(contract_hash, ENTRY_POINT_INIT, runtime_args! {});
 }
 
 pub fn burn_nft(contract_hash: ContractHash, token_id: u64) -> () {
@@ -197,6 +330,30 @@ pub fn mint_nft(contract_hash: ContractHash, owner: Key, metadata: String) -> ()
     )
 }
 
+pub fn mint_nft_extend(
+    contract_hash: ContractHash,
+    owner: Key,
+    contract_address: Key,
+    metadata: String
+) -> (String, Key, String) {
+    runtime::call_contract::<(String, URef)>(
+        contract_hash,
+        "register_owner",
+        runtime_args! {
+            "token_owner" => contract_address,
+        }
+    );
+
+    runtime::call_contract::<(String, Key, String)>(
+        contract_hash,
+        "mint",
+        runtime_args! {
+          "token_owner" => owner,
+          "token_meta_data" => metadata
+      }
+    )
+}
+
 pub fn get_nft_metadata(contract_hash: ContractHash, token_id: u64) -> String {
     runtime::call_contract::<String>(
         contract_hash,
@@ -204,5 +361,15 @@ pub fn get_nft_metadata(contract_hash: ContractHash, token_id: u64) -> String {
         runtime_args! {
           "token_id" => token_id,
       }
+    )
+}
+
+pub fn owner_of(contract_hash: ContractHash, token_id: u64) -> Key {
+    runtime::call_contract::<Key>(
+        contract_hash,
+        "owner_of",
+        runtime_args! {
+            "token_id" => token_id,
+        }
     )
 }

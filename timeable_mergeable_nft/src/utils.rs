@@ -15,6 +15,7 @@ fn current_timestamp() -> U512 {
     time.into()
 }
 
+// ref => https://github.com/BitHotelOrg/bithotel-casper-contracts/blob/8d53dc0047bb0e28ca02c7ff688d0090ece8df77/marketplace/contract/src/utils.rs#L22
 pub fn get_current_address() -> Address {
     let call_stack_element = runtime::get_call_stack().into_iter().rev().next().unwrap_or_revert();
     match call_stack_element {

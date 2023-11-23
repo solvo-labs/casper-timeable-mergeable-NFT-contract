@@ -6,6 +6,8 @@ pub enum Error {
     FatalError = 0,
     AdminError = 1,
     NotMergableNft = 2,
+    NotTimeableNft = 3,
+    InvalidOwner = 4,
 }
 
 impl From<Error> for ApiError {
