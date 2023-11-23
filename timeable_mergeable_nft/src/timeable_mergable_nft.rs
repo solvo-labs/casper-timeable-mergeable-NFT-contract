@@ -100,6 +100,12 @@ pub extern "C" fn merge() {
             runtime::revert(Error::NotMergableNft);
         }
 
+        let owner = owner_of(collection_hash, token_id);
+
+        if owner != Key::Account(caller) {
+            runtime::revert(Error::InvalidOwner);
+        }
+
         burn_nft(collection_hash, token_id);
     }
 
