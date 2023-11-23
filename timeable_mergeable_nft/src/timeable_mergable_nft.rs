@@ -126,8 +126,16 @@ pub extern "C" fn merge() {
 pub extern "C" fn burn() {
     let collection: Key = runtime::get_named_arg(COLLECTION);
     let token_id: u64 = runtime::get_named_arg(TOKEN_ID);
+    let caller: AccountHash = runtime::get_caller();
 
     let collection_hash: ContractHash = collection.into_hash().map(ContractHash::new).unwrap();
+
+    let owner = owner_of(collection_hash, token_id);
+
+    if owner != Key::Account(caller) {
+        runtime::revert(Error::InvalidOwner);
+    }
+
     burn_nft(collection_hash, token_id);
 }
 
@@ -188,16 +196,16 @@ pub extern "C" fn burn_timeable_nft() {
     for i in 0..=nft_index {
         let nft = storage::dictionary_get::<TimeableNft>(nfts, &i.to_string()).unwrap().unwrap();
 
-        if nft.burned == false && now > nft.timestamp {
-            burn_nft(nft.contract_hash, nft.nft_index);
+        // if nft.burned == false && now > nft.timestamp {
+        burn_nft(nft.contract_hash, nft.nft_index);
 
-            storage::dictionary_put(nfts, &i.to_string(), TimeableNft {
-                nft_index: nft.nft_index,
-                timestamp: nft.timestamp,
-                contract_hash: nft.contract_hash,
-                burned: true,
-            });
-        }
+        storage::dictionary_put(nfts, &i.to_string(), TimeableNft {
+            nft_index: nft.nft_index,
+            timestamp: nft.timestamp,
+            contract_hash: nft.contract_hash,
+            burned: true,
+        });
+        // }
     }
 }
 
@@ -347,5 +355,15 @@ pub fn get_nft_metadata(contract_hash: ContractHash, token_id: u64) -> String {
         runtime_args! {
           "token_id" => token_id,
       }
+    )
+}
+
+pub fn owner_of(contract_hash: ContractHash, token_id: u64) -> Key {
+    runtime::call_contract::<Key>(
+        contract_hash,
+        "owner_of",
+        runtime_args! {
+            "token_id" => token_id,
+        }
     )
 }
