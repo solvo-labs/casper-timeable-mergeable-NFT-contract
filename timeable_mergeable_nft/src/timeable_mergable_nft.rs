@@ -17,7 +17,6 @@ use casper_types::{
     RuntimeArgs,
     runtime_args,
     Parameter,
-    U256,
     URef,
 };
 
@@ -79,7 +78,7 @@ struct TimeableNft {
     nft_index: u64,
     timestamp: u64,
     contract_hash: ContractHash,
-    burned: bool,
+    burnt: bool,
 }
 
 #[no_mangle]
@@ -181,13 +180,13 @@ pub extern "C" fn mint_timeable_nft() {
 
     let nfts: URef = *runtime::get_key(TIMEABLE_NFTS).unwrap().as_uref().unwrap();
 
-    let nft_index: U256 = utils::read_from(NFT_INDEX);
+    let nft_index: u64 = utils::read_from(NFT_INDEX);
 
     storage::dictionary_put(nfts, &nft_index.to_string(), TimeableNft {
         nft_index: new_nft_index.parse::<u64>().unwrap(),
         timestamp: metadata_extended.timestamp,
         contract_hash: collection_hash,
-        burned: false,
+        burnt: false,
     });
 
     runtime::put_key(NFT_INDEX, storage::new_uref(nft_index.add(1)).into());
@@ -200,18 +199,18 @@ pub extern "C" fn burn_timeable_nft() {
     let now: u64 = runtime::get_blocktime().into();
 
     for i in 0..=nft_index {
-        let nft = storage::dictionary_get::<TimeableNft>(nfts, &i.to_string()).unwrap().unwrap();
+        if let Some(nft) = storage::dictionary_get::<TimeableNft>(nfts, &i.to_string()).unwrap() {
+            if nft.burnt == false && now > nft.timestamp {
+                burn_nft(nft.contract_hash, nft.nft_index);
 
-        // if nft.burned == false && now > nft.timestamp {
-        burn_nft(nft.contract_hash, nft.nft_index);
-
-        storage::dictionary_put(nfts, &i.to_string(), TimeableNft {
-            nft_index: nft.nft_index,
-            timestamp: nft.timestamp,
-            contract_hash: nft.contract_hash,
-            burned: true,
-        });
-        // }
+                storage::dictionary_put(nfts, &i.to_string(), TimeableNft {
+                    nft_index: nft.nft_index,
+                    timestamp: nft.timestamp,
+                    contract_hash: nft.contract_hash,
+                    burnt: true,
+                });
+            }
+        }
     }
 }
 
@@ -219,7 +218,7 @@ pub extern "C" fn burn_timeable_nft() {
 pub extern "C" fn init() {
     storage::new_dictionary(TIMEABLE_NFTS).unwrap_or_default();
 
-    let nft_count = U256::zero();
+    let nft_count: u64 = 0u64;
     runtime::put_key(NFT_INDEX, storage::new_uref(nft_count).into());
 }
 
