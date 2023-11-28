@@ -170,12 +170,10 @@ pub extern "C" fn mint_timeable_nft() {
     }
 
     let collection_hash: ContractHash = collection.into_hash().map(ContractHash::new).unwrap();
-    let contract_address = utils::get_current_address();
 
     let (_, _, new_nft_index): (String, Key, String) = mint_nft_extend(
         collection_hash,
         target_address,
-        contract_address.into(),
         metadata
     );
 
@@ -337,14 +335,13 @@ pub fn mint_nft(contract_hash: ContractHash, owner: Key, metadata: String) -> ()
 pub fn mint_nft_extend(
     contract_hash: ContractHash,
     owner: Key,
-    contract_address: Key,
     metadata: String
 ) -> (String, Key, String) {
     runtime::call_contract::<(String, URef)>(
         contract_hash,
         "register_owner",
         runtime_args! {
-            "token_owner" => contract_address,
+            "token_owner" => owner,
         }
     );
 
