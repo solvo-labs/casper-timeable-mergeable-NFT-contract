@@ -34,6 +34,7 @@ const TOKEN_IDS: &str = "token_ids";
 const NAME: &str = "name";
 const OWNER: &str = "owner";
 const NFT_INDEX: &str = "nft_index";
+const TARGET_ADDRESS: &str = "target_address";
 
 //entry points
 const ENTRY_POINT_MINT: &str = "mint";
@@ -57,9 +58,9 @@ struct MetadataExtended {
     name: String,
     description: String,
     asset: String,
-    timeable: bool,
-    mergable: bool,
-    timestamp: u64,
+    timeable: Option<bool>,
+    mergable: Option<bool>,
+    timestamp: Option<u64>,
 }
 
 impl ToString for MetadataBase {
@@ -95,7 +96,7 @@ pub extern "C" fn merge() {
             ::from_str::<MetadataExtended>(&metadata)
             .unwrap();
 
-        if deserialised.mergable == false {
+        if let Some(false) = deserialised.mergable {
             runtime::revert(Error::NotMergableNft);
         }
 
@@ -158,13 +159,13 @@ pub extern "C" fn mint() {
 pub extern "C" fn mint_timeable_nft() {
     let metadata: String = runtime::get_named_arg(METADATA);
     let collection: Key = runtime::get_named_arg(COLLECTION);
-    let caller: AccountHash = runtime::get_caller();
+    let target_address: Key = runtime::get_named_arg(TARGET_ADDRESS);
 
     let metadata_extended: MetadataExtended = serde_json_wasm
         ::from_str::<MetadataExtended>(&metadata)
         .unwrap();
 
-    if metadata_extended.timeable == false {
+    if let Some(false) = metadata_extended.timeable {
         runtime::revert(Error::NotTimeableNft);
     }
 
@@ -173,7 +174,7 @@ pub extern "C" fn mint_timeable_nft() {
 
     let (_, _, new_nft_index): (String, Key, String) = mint_nft_extend(
         collection_hash,
-        Key::Account(caller),
+        target_address,
         contract_address.into(),
         metadata
     );
@@ -184,7 +185,7 @@ pub extern "C" fn mint_timeable_nft() {
 
     storage::dictionary_put(nfts, &nft_index.to_string(), TimeableNft {
         nft_index: new_nft_index.parse::<u64>().unwrap(),
-        timestamp: metadata_extended.timestamp,
+        timestamp: metadata_extended.timestamp.unwrap_or_default(),
         contract_hash: collection_hash,
         burnt: false,
     });
@@ -271,7 +272,11 @@ pub extern "C" fn call() {
 
     let mint_timeable_nft_entry_point = EntryPoint::new(
         ENTRY_POINT_MINT_TIMEABLE_NFT,
-        vec![Parameter::new(COLLECTION, CLType::Key), Parameter::new(METADATA, CLType::String)],
+        vec![
+            Parameter::new(COLLECTION, CLType::Key),
+            Parameter::new(METADATA, CLType::String),
+            Parameter::new(TARGET_ADDRESS, CLType::Key)
+        ],
         CLType::URef,
         EntryPointAccess::Public,
         EntryPointType::Contract
