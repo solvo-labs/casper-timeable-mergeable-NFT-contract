@@ -5,7 +5,7 @@ use casper_types::ApiError;
 pub enum Error {
     FatalError = 0,
     AdminError = 1,
-    NotMergableNft = 2,
+    NotMergeableNft = 2,
     NotTimeableNft = 3,
     InvalidOwner = 4,
 }

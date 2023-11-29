@@ -1,4 +1,4 @@
-# casper-timeable-mergable-nft-contract (W.I.P)
+# casper-timeable-mergeable-nft-contract (W.I.P)
 
 ## Preparation
 

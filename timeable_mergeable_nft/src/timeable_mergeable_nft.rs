@@ -59,7 +59,7 @@ struct MetadataExtended {
     description: String,
     asset: String,
     timeable: Option<bool>,
-    mergable: Option<bool>,
+    mergeable: Option<bool>,
     timestamp: Option<u64>,
 }
 
@@ -96,8 +96,8 @@ pub extern "C" fn merge() {
             ::from_str::<MetadataExtended>(&metadata)
             .unwrap();
 
-        if let Some(false) = deserialised.mergable {
-            runtime::revert(Error::NotMergableNft);
+        if let Some(false) = deserialised.mergeable {
+            runtime::revert(Error::NotMergeableNft);
         }
 
         let owner = owner_of(collection_hash, token_id);
