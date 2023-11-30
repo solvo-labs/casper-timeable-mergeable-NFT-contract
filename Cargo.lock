@@ -617,6 +617,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "timeable_nft_deposit"
+version = "0.1.0"
+dependencies = [
+ "casper-contract",
+ "casper-types",
+ "casper_types_derive",
+]
+
+[[package]]
 name = "typenum"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

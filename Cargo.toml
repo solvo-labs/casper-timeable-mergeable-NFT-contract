@@ -1,5 +1,6 @@
 [workspace]
 
 members = [
-    "timeable_mergeable_nft"
+    "timeable_mergeable_nft",
+    "timeable_nft_deposit"
 ]

@@ -18,11 +18,12 @@ use casper_types::{
     runtime_args,
     Parameter,
     URef,
+    CLValue,
 };
 
 use casper_types_derive::{ CLTyped, FromBytes, ToBytes };
 
-use casper_contract::contract_api::{ runtime, storage };
+use casper_contract::{ contract_api::{ runtime, storage }, unwrap_or_revert::UnwrapOrRevert };
 
 use serde::{ Deserialize, Serialize };
 
@@ -35,14 +36,16 @@ const NAME: &str = "name";
 const OWNER: &str = "owner";
 const NFT_INDEX: &str = "nft_index";
 const TARGET_ADDRESS: &str = "target_address";
+const FEE_WALLET: &str = "fee_wallet";
 
 //entry points
-const ENTRY_POINT_MINT: &str = "mint";
 const ENTRY_POINT_MINT_TIMEABLE_NFT: &str = "mint_timeable_nft";
 const ENTRY_POINT_BURN: &str = "burn";
 const ENTRY_POINT_MERGE: &str = "merge";
 const ENTRY_POINT_INIT: &str = "init";
 const ENTRY_POINT_BURN_TIMEABLE_NFT: &str = "burn_timeable_nft";
+const ENTRY_POINT_GET_FEE_WALLET: &str = "get_fee_wallet";
+const ENTRY_POINT_CHANGE_FEE_WALLET: &str = "change_fee_wallet";
 
 //dicts
 const TIMEABLE_NFTS: &str = "timeable_nfts";
@@ -146,16 +149,6 @@ pub extern "C" fn burn() {
 }
 
 #[no_mangle]
-pub extern "C" fn mint() {
-    let metadata: String = runtime::get_named_arg(METADATA);
-    let collection: Key = runtime::get_named_arg(COLLECTION);
-    let caller: AccountHash = runtime::get_caller();
-
-    let collection_hash: ContractHash = collection.into_hash().map(ContractHash::new).unwrap();
-    mint_nft(collection_hash, Key::Account(caller), metadata);
-}
-
-#[no_mangle]
 pub extern "C" fn mint_timeable_nft() {
     let metadata: String = runtime::get_named_arg(METADATA);
     let collection: Key = runtime::get_named_arg(COLLECTION);
@@ -214,6 +207,21 @@ pub extern "C" fn burn_timeable_nft() {
 }
 
 #[no_mangle]
+pub extern "C" fn get_fee_wallet() {
+    let fee_wallet: Key = utils::read_from(FEE_WALLET);
+
+    runtime::ret(CLValue::from_t(fee_wallet).unwrap_or_revert());
+}
+
+#[no_mangle]
+pub extern "C" fn change_fee_wallet() {
+    check_admin_account();
+    let fee_wallet: Key = runtime::get_named_arg(FEE_WALLET);
+
+    runtime::put_key(FEE_WALLET, storage::new_uref(fee_wallet).into());
+}
+
+#[no_mangle]
 pub extern "C" fn init() {
     storage::new_dictionary(TIMEABLE_NFTS).unwrap_or_default();
 
@@ -223,6 +231,7 @@ pub extern "C" fn init() {
 
 #[no_mangle]
 pub extern "C" fn call() {
+    let fee_wallet: Key = runtime::get_named_arg(FEE_WALLET);
     let name = "Dappend CEP-78 Custom NFT Contract";
     let owner: AccountHash = runtime::get_caller();
 
@@ -230,16 +239,9 @@ pub extern "C" fn call() {
 
     named_keys.insert(NAME.to_string(), storage::new_uref(name.clone()).into());
     named_keys.insert(OWNER.to_string(), storage::new_uref(owner.clone()).into());
+    named_keys.insert(FEE_WALLET.to_string(), storage::new_uref(fee_wallet.clone()).into());
 
     let mut entry_points = EntryPoints::new();
-
-    let mint_entry_point = EntryPoint::new(
-        ENTRY_POINT_MINT,
-        vec![Parameter::new(COLLECTION, CLType::Key), Parameter::new(METADATA, CLType::String)],
-        CLType::URef,
-        EntryPointAccess::Public,
-        EntryPointType::Contract
-    );
 
     let burn_entry_point = EntryPoint::new(
         ENTRY_POINT_BURN,
@@ -288,12 +290,29 @@ pub extern "C" fn call() {
         EntryPointType::Contract
     );
 
-    entry_points.add_entry_point(mint_entry_point);
+    let get_fee_wallet_entry_point = EntryPoint::new(
+        ENTRY_POINT_GET_FEE_WALLET,
+        vec![],
+        CLType::Key,
+        EntryPointAccess::Public,
+        EntryPointType::Contract
+    );
+
+    let change_fee_wallet_entry_point = EntryPoint::new(
+        ENTRY_POINT_CHANGE_FEE_WALLET,
+        vec![],
+        CLType::URef,
+        EntryPointAccess::Public,
+        EntryPointType::Contract
+    );
+
     entry_points.add_entry_point(burn_entry_point);
     entry_points.add_entry_point(merge_entry_point);
     entry_points.add_entry_point(init_entry_point);
     entry_points.add_entry_point(mint_timeable_nft_entry_point);
     entry_points.add_entry_point(burn_timeable_nft_entry_point);
+    entry_points.add_entry_point(get_fee_wallet_entry_point);
+    entry_points.add_entry_point(change_fee_wallet_entry_point);
 
     let hash_name = String::from("dappend_nft_package_hash");
     let uref_name = String::from("dappend_nft_access_uref");
@@ -373,4 +392,12 @@ pub fn owner_of(contract_hash: ContractHash, token_id: u64) -> Key {
             "token_id" => token_id,
         }
     )
+}
+
+pub fn check_admin_account() {
+    let admin: AccountHash = utils::get_key(OWNER);
+    let caller = runtime::get_caller();
+    if admin != caller {
+        runtime::revert(Error::AdminError);
+    }
 }

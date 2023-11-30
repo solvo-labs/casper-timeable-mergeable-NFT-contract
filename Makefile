@@ -1,4 +1,4 @@
-ALL_CONTRACTS = timeable_mergeable_nft
+ALL_CONTRACTS = timeable_mergeable_nft timeable_nft_deposit
 CONTRACT_TARGET_DIR = target/wasm32-unknown-unknown/release
 PINNED_TOOLCHAIN := $(shell cat rust-toolchain)
 
