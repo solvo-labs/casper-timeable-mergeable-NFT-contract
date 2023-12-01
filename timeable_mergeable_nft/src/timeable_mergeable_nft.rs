@@ -77,7 +77,7 @@ impl ToString for MetadataBase {
     }
 }
 
-#[derive(Clone, Debug, CLTyped, ToBytes, FromBytes)]
+#[derive(Clone, Debug, CLTyped, ToBytes, FromBytes, Serialize, Deserialize)]
 struct TimeableNft {
     nft_index: u64,
     timestamp: u64,
@@ -174,12 +174,16 @@ pub extern "C" fn mint_timeable_nft() {
 
     let nft_index: u64 = utils::read_from(NFT_INDEX);
 
-    storage::dictionary_put(nfts, &nft_index.to_string(), TimeableNft {
+    let nft = TimeableNft {
         nft_index: new_nft_index.parse::<u64>().unwrap(),
         timestamp: metadata_extended.timestamp.unwrap_or_default(),
         contract_hash: collection_hash,
         burnt: false,
-    });
+    };
+
+    let json_string = serde_json_wasm::to_string(&nft).unwrap();
+
+    storage::dictionary_put(nfts, &nft_index.to_string(), json_string);
 
     runtime::put_key(NFT_INDEX, storage::new_uref(nft_index.add(1)).into());
 }
@@ -191,7 +195,15 @@ pub extern "C" fn burn_timeable_nft() {
     let now: u64 = runtime::get_blocktime().into();
 
     for i in 0..=nft_index {
-        if let Some(nft) = storage::dictionary_get::<TimeableNft>(nfts, &i.to_string()).unwrap() {
+        if
+            let Some(nft_value_string) = storage
+                ::dictionary_get::<String>(nfts, &i.to_string())
+                .unwrap()
+        {
+            let nft: TimeableNft = serde_json_wasm
+                ::from_str::<TimeableNft>(&nft_value_string)
+                .unwrap();
+
             if nft.burnt == false && now > nft.timestamp {
                 burn_nft(nft.contract_hash, nft.nft_index);
 
