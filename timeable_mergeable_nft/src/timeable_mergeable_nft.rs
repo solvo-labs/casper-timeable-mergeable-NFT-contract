@@ -35,7 +35,6 @@ const TOKEN_IDS: &str = "token_ids";
 const NAME: &str = "name";
 const OWNER: &str = "owner";
 const NFT_INDEX: &str = "nft_index";
-const TARGET_ADDRESS: &str = "target_address";
 const FEE_WALLET: &str = "fee_wallet";
 
 //entry points
@@ -152,7 +151,6 @@ pub extern "C" fn burn() {
 pub extern "C" fn mint_timeable_nft() {
     let metadata: String = runtime::get_named_arg(METADATA);
     let collection: Key = runtime::get_named_arg(COLLECTION);
-    let target_address: Key = runtime::get_named_arg(TARGET_ADDRESS);
 
     let metadata_extended: MetadataExtended = serde_json_wasm
         ::from_str::<MetadataExtended>(&metadata)
@@ -163,10 +161,11 @@ pub extern "C" fn mint_timeable_nft() {
     }
 
     let collection_hash: ContractHash = collection.into_hash().map(ContractHash::new).unwrap();
+    let caller: AccountHash = runtime::get_caller();
 
     let (_, _, new_nft_index): (String, Key, String) = mint_nft_extend(
         collection_hash,
-        target_address,
+        caller.into(),
         metadata
     );
 
@@ -288,11 +287,7 @@ pub extern "C" fn call() {
 
     let mint_timeable_nft_entry_point = EntryPoint::new(
         ENTRY_POINT_MINT_TIMEABLE_NFT,
-        vec![
-            Parameter::new(COLLECTION, CLType::Key),
-            Parameter::new(METADATA, CLType::String),
-            Parameter::new(TARGET_ADDRESS, CLType::Key)
-        ],
+        vec![Parameter::new(COLLECTION, CLType::Key), Parameter::new(METADATA, CLType::String)],
         CLType::URef,
         EntryPointAccess::Public,
         EntryPointType::Contract
