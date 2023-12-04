@@ -207,12 +207,16 @@ pub extern "C" fn burn_timeable_nft() {
             if nft.burnt == false && now > nft.timestamp {
                 burn_nft(nft.contract_hash, nft.nft_index);
 
-                storage::dictionary_put(nfts, &i.to_string(), TimeableNft {
+                let nft = TimeableNft {
                     nft_index: nft.nft_index,
                     timestamp: nft.timestamp,
                     contract_hash: nft.contract_hash,
                     burnt: true,
-                });
+                };
+
+                let json_string = serde_json_wasm::to_string(&nft).unwrap();
+
+                storage::dictionary_put(nfts, &i.to_string(), json_string);
             }
         }
     }
